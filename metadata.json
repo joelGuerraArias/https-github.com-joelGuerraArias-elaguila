@@ -1,0 +1,6 @@
+{
+  "name": "Procesador de Alertas INTRANT",
+  "description": "Lee correos de alertas de INTRANT y Milton Morrison desde Gmail, extrae su información redactada y la guarda en un Google Sheet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
