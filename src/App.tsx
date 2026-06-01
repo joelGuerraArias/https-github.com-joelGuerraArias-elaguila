@@ -684,13 +684,13 @@ export default function App() {
   };
 
   // Core Sincronización execution trigger (supports manual & automatic check trigger)
-  const triggerExchangeSync = async (isAuto: boolean = false, simulate: boolean = false) => {
+  const triggerExchangeSync = async (isAuto: boolean = false) => {
     if (!token && !bypassConfigured) {
       if (authLoading) {
         addClientLog("info", "Esperando reinicio de credenciales de Google...");
         return;
       }
-      addClientLog("warn", "⚠️ Vigilancia en pausa: Falta iniciar sesión con Google. Haz clic en 'Iniciar sesión con Google' para reactivarla o asegúrate de tener configurados los secrets de bypass de fondo.");
+      addClientLog("warn", "⚠️ Vigilancia en pausa: Falta iniciar sesión con Google. Haz clic en 'Iniciar sesión con Google' para reactivarla.");
       return;
     }
     if (!spreadsheetId.trim()) {
@@ -700,7 +700,7 @@ export default function App() {
 
     setIsSyncing(true);
     setGeminiQuotaExceeded(false);
-    addClientLog("info", `Iniciando rastreadores ${simulate ? "simulados" : isAuto ? "automáticos" : "manuales"} para el día de hoy (${systemDate})...`);
+    addClientLog("info", `Iniciando rastreadores ${isAuto ? "automáticos" : "manuales"} para el día de hoy (${systemDate})...`);
 
     try {
       const res = await fetch("/api/sync", {
@@ -712,8 +712,7 @@ export default function App() {
           sheetName,
           searchQuery,
           onlyToday,
-          currentLocalDate: systemDate,
-          simulate
+          currentLocalDate: systemDate
         })
       });
 
@@ -758,6 +757,56 @@ export default function App() {
     }
   };
 
+  // Dynamic config for main sync button to guide the user under expired token or unlogged states
+  const getSyncButtonConfig = () => {
+    if (isSyncing) {
+      return {
+        text: "Procesando Correos de Hoy...",
+        onClick: () => {},
+        disabled: true,
+        className: "bg-slate-850 border border-slate-800 text-slate-500 cursor-not-allowed opacity-75"
+      };
+    }
+    if (!spreadsheetId || !spreadsheetId.toString().trim()) {
+      return {
+        text: "Falta Configurar Google Sheet ID",
+        onClick: () => {},
+        disabled: true,
+        className: "bg-slate-850 border border-slate-800 text-slate-500 cursor-not-allowed opacity-75"
+      };
+    }
+    if (token && !isTokenExpired) {
+      return {
+        text: "Sincronizar Alertas Ahora",
+        onClick: () => triggerExchangeSync(false),
+        disabled: false,
+        className: "bg-emerald-600 hover:bg-emerald-500 hover:scale-[1.01] active:translate-y-px text-white cursor-pointer shadow-lg shadow-emerald-950/20"
+      };
+    }
+    if (bypassConfigured) {
+      return {
+        text: "Sincronizar Alertas Ahora (Bypass)",
+        onClick: () => triggerExchangeSync(false),
+        disabled: false,
+        className: "bg-emerald-600 hover:bg-emerald-500 hover:scale-[1.01] active:translate-y-px text-white cursor-pointer shadow-lg shadow-emerald-950/20"
+      };
+    }
+    if (user) {
+      return {
+        text: "🔄 Renovar Sesión de Google para Sincronizar",
+        onClick: handleLogin,
+        disabled: false,
+        className: "bg-amber-500 text-slate-950 border border-amber-600 hover:bg-amber-400 hover:scale-[1.01] active:translate-y-px cursor-pointer font-bold shadow-lg shadow-amber-950/20"
+      };
+    }
+    return {
+      text: "Conectar con Google para Sincronizar",
+      onClick: handleLogin,
+      disabled: false,
+      className: "bg-blue-600 hover:bg-blue-500 hover:scale-[1.01] active:translate-y-px text-white cursor-pointer shadow-lg shadow-blue-950/20"
+    };
+  };
+
   // Countdown controller for periodic scans
   useEffect(() => {
     let timer: any = null;
@@ -784,6 +833,8 @@ export default function App() {
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
+
+
 
   return (
     <div className="min-h-screen font-sans bg-[#080d16] text-[#e2e8f0] pb-16">
@@ -1247,9 +1298,12 @@ export default function App() {
 
             {/* Run manual trigger */}
             <button
-              onClick={() => triggerExchangeSync(false)}
-              disabled={isSyncing || (!user && !bypassConfigured) || !spreadsheetId}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold shadow-md transition-all uppercase tracking-wider"
+              onClick={() => {
+                const cfg = getSyncButtonConfig();
+                cfg.onClick();
+              }}
+              disabled={getSyncButtonConfig().disabled}
+              className={`w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-xs font-bold shadow-md transition-all uppercase tracking-wider font-sans ${getSyncButtonConfig().className}`}
             >
               {isSyncing ? (
                 <>
@@ -1258,21 +1312,10 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <Play className="h-4 w-4 text-white" />
-                  <span>{token ? "Sincronizar Alertas Ahora" : bypassConfigured ? "Sincronizar Alertas (Bypass Activo)" : "Sincronizar Alertas Ahora"}</span>
+                  <Play className="h-4 w-4 text-white hover:scale-110 transition-transform" />
+                  <span>{getSyncButtonConfig().text}</span>
                 </>
               )}
-            </button>
-
-            {/* Run simulation trigger */}
-            <button
-              onClick={() => triggerExchangeSync(false, true)}
-              disabled={isSyncing || (!user && !bypassConfigured) || !spreadsheetId}
-              className="w-full bg-[#141b2c] hover:bg-[#1a233b] text-emerald-400 border border-emerald-950/60 hover:border-emerald-500/20 disabled:bg-slate-800 disabled:opacity-45 disabled:cursor-not-allowed font-medium py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all uppercase tracking-wider shadow"
-              title="Simula la recepción de un correo de prensa de hoy que contiene los términos INTRANT y Morrison, y lo indexa usando Gemini en tu Sheet."
-            >
-              <Sparkles className="h-4 w-4 text-emerald-400" />
-              <span>Simular Alerta e Indexar (Demo)</span>
             </button>
 
             {/* Auto Periodic Section */}
